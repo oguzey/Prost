@@ -7,6 +7,7 @@
 #define IND(x, y) (x + y * 4)
 
 #define D 32  // count of bits
+#define T 18 // rounds
 typedef __u32 state_cell;
 static state_cell _s_state[16];
 
@@ -153,24 +154,79 @@ static inline void mix_slices(void)
         //set bits
         for (x = 0; x < 4; ++x) {
             for (y = 0; y < 4; ++y) {
-                set_bit(_s_state[IND(x,y)], z, mul[4 * x + y]);
+                set_bit(_s_state[IND(x,y)], z, res[4 * x + y]);
             }
         }
     }
 
 }
 
+static inline state_cell rotleft(state_cell value, int shift) {
+    return (value << shift) | (value >> (sizeof(value) * 8 - shift));
+}
+
+static inline state_cell msb(__u32 value)
+{
+    assert(value > 0);
+
+    state_cell r = 0;
+    while (value >>= 1) {
+        r++;
+    }
+    return r;
+}
+
+static inline void add_constants(int round)
+{
+    assert(round >= 0 && round < T);
+
+    state_cell c1 = msb(0x75817b9d);
+    state_cell c2 = msb(0xb2c5fef0);
+    c1 = 1 << c1;
+    c2 = 1 << c2;
+
+    int x, y, j;
+    for (x = 0; x < 4; ++x) {
+        for (y = 0; y < 4; ++y) {
+            j = 4 *x + y;
+            if (j % 2 == 0) {
+                _s_state[IND(x,y)] ^= (rotleft(c1, round + j));
+            } else {
+                _s_state[IND(x,y)] ^= (rotleft(c2, round + j));
+            }
+        }
+    }
+}
 
 
 void check_mapping(__u8 *input, size_t size, __u8 *output)
 {
     map_byte_stream_to_state(input, size);
-    //sub_rows();
-    //print_state("after sub row");
-    mix_slices();
-    print_state("after mix state");
-    //sub_rows();
-    mix_slices();
+//    sub_rows();
+//    print_state("after sub row");
+//    mix_slices();
+//    print_state("after mix state");
+//    mix_slices();
+//    print_state("after mix slices2");
+//    sub_rows();
+//    print_state("after sub row2");
+
+    int i = 0;
+    for (i = 0; i < T; ++i) {
+        printf("round %d  \n", i);
+        add_constants(i);
+        print_state("after add_constants round ");
+    }
+
+    print_state("after add_constants all ");
+
+
+    for (i = 0; i < T; ++i) {
+        printf("round %d  \n", i);
+        add_constants(i);
+        print_state("after add_constants round ");
+    }
+
     map_state_to_byte_stream(output, size);
 }
 
