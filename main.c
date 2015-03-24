@@ -3,6 +3,7 @@
 #include <assert.h>
 
 #include "Prost_Permutation.h"
+#include "Prost_APE.h"
 
 static int test_prost_permutation(void)
 {
@@ -15,10 +16,11 @@ static int test_prost_permutation(void)
     for(i = 0; i < 64; ++i) {
         input[i] = i;
         output_perm[i] = 0;
+        output_inv_perm[i] = 0;
     }
 
-    prost_permutation(input, 64, output_perm);
-    prost_permutation_inverse(output_perm, 64, output_inv_perm);
+    prost_permutation(input, 64, output_perm, 64);
+    prost_permutation_inverse(output_perm, 64, output_inv_perm, 64);
 
     for(i = 0; i < 64; ++i) {
         if (input[i] != output_inv_perm[i]) {
@@ -34,6 +36,28 @@ int main(void)
 {
     printf("Hello World!\n");
     assert(test_prost_permutation() == 0);
+
+    __u8 input[64];
+    int i = 0;
+
+    for(i = 0; i < 64; ++i) {
+        input[i] = i;
+    }
+
+    __u8 *ct = NULL;
+    __u8 *tag = NULL;
+    size_t size_ct = 0, size_tag = 0;
+    prost_encrypt(input, 64, &ct, &size_ct, &tag, &size_tag);
+    printf("Cypher text \n");
+    for(i = size_ct - 1; i >= 0; --i) {
+        printf("%02x ", ct[i]);
+    }
+    printf("\nTag \n");
+    for(i = size_tag - 1; i >= 0; --i) {
+        printf("%02x ", tag[i]);
+    }
+    printf("\n");
+
     return 0;
 }
 

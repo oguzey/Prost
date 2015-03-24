@@ -232,9 +232,10 @@ static inline void shift_planes_inv(int round)
 }
 
 
-void prost_permutation(__u8 *input, size_t size, __u8 *output)
+void prost_permutation(__u8 *input, size_t size_in
+                       , __u8 *output, size_t size_out)
 {
-    map_byte_stream_to_state(input, size);
+    map_byte_stream_to_state(input, size_in);
     int round = 0;
     for (round = 0; round < T; ++round) {
         sub_rows();
@@ -242,12 +243,13 @@ void prost_permutation(__u8 *input, size_t size, __u8 *output)
         shift_planes(round);
         add_constants(round);
     }
-    map_state_to_byte_stream(output, size);
+    map_state_to_byte_stream(output, size_out);
 }
 
-void prost_permutation_inverse(__u8 *input, size_t size, __u8 *output)
+void prost_permutation_inverse(__u8 *input, size_t size_in
+                               , __u8 *output, size_t size_out)
 {
-    map_byte_stream_to_state(input, size);
+    map_byte_stream_to_state(input, size_in);
     int round;
     for (round = T - 1; round >= 0; --round) {
         add_constants(round);
@@ -255,7 +257,7 @@ void prost_permutation_inverse(__u8 *input, size_t size, __u8 *output)
         mix_slices();
         sub_rows();
     }
-    map_state_to_byte_stream(output, size);
+    map_state_to_byte_stream(output, size_out);
 }
 
 #undef set_bit
