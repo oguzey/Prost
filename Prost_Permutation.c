@@ -165,6 +165,10 @@ static inline state_cell rotleft(state_cell value, int shift) {
     return (value << shift) | (value >> (sizeof(value) * 8 - shift));
 }
 
+static inline state_cell rotright(state_cell value, int shift) {
+    return (value >> shift) | (value << (sizeof(value) * 8 - shift));
+}
+
 static inline state_cell msb(__u32 value)
 {
     assert(value > 0);
@@ -199,34 +203,58 @@ static inline void add_constants(int round)
 }
 
 
-void check_mapping(__u8 *input, size_t size, __u8 *output)
+static inline void shift_planes(int round)
+{
+    assert(round >= 0 && round < T);
+
+    int P[2][4] = {{0, 4, 12, 26}, {1, 24, 26, 31}};
+
+    int x, y;
+    for (x = 0; x < 4; ++x) {
+        for (y = 0; y < 4; ++y) {
+            _s_state[IND(x, y)] = rotright(_s_state[IND(x, y)], P[round%2][x]);
+        }
+    }
+}
+
+static inline void shift_planes_inv(int round)
+{
+    assert(round >= 0 && round < T);
+
+    int P[2][4] = {{0, 4, 12, 26}, {1, 24, 26, 31}};
+
+    int x, y;
+    for (x = 0; x < 4; ++x) {
+        for (y = 0; y < 4; ++y) {
+            _s_state[IND(x, y)] = rotleft(_s_state[IND(x, y)], P[round%2][x]);
+        }
+    }
+}
+
+
+void prost_permutation(__u8 *input, size_t size, __u8 *output)
 {
     map_byte_stream_to_state(input, size);
-//    sub_rows();
-//    print_state("after sub row");
-//    mix_slices();
-//    print_state("after mix state");
-//    mix_slices();
-//    print_state("after mix slices2");
-//    sub_rows();
-//    print_state("after sub row2");
-
-    int i = 0;
-    for (i = 0; i < T; ++i) {
-        printf("round %d  \n", i);
-        add_constants(i);
-        print_state("after add_constants round ");
+    int round = 0;
+    for (round = 0; round < T; ++round) {
+        sub_rows();
+        mix_slices();
+        shift_planes(round);
+        add_constants(round);
     }
+    map_state_to_byte_stream(output, size);
+}
 
-    print_state("after add_constants all ");
-
-
-    for (i = 0; i < T; ++i) {
-        printf("round %d  \n", i);
-        add_constants(i);
-        print_state("after add_constants round ");
+void prost_permutation_inverse(__u8 *input, size_t size, __u8 *output)
+{
+    map_byte_stream_to_state(input, size);
+    int round;
+    for (round = T - 1; round >= 0; --round) {
+        add_constants(round);
+        shift_planes_inv(round);
+        mix_slices();
+        sub_rows();
     }
-
     map_state_to_byte_stream(output, size);
 }
 
