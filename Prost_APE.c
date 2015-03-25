@@ -55,6 +55,23 @@
 //    return concatenation_data_to_block(data, size, add, size_add);
 //}
 
+#define print_v(vector, size, reverse, msg) \
+do {                        \
+    int i;      \
+    __u8 *v = vector; \
+printf("%s\n", msg);        \
+if (reverse) {      \
+   for (i = size - 1; i >= 0; --i){     \
+       printf("%02x ", v[i]);        \
+   }        \
+} else {    \
+    for (i = 0; i < (int)size; ++i){   \
+        printf("%02x ", v[i]);   \
+    }   \
+}   \
+printf("\n");   \
+} while(0)
+
 
 void prost_encrypt(__u8 *data, size_t size
                    , __u8 **ct, size_t *size_ct, __u8 **tag, size_t *size_tag)
@@ -69,7 +86,7 @@ void prost_encrypt(__u8 *data, size_t size
     memset(V, 0x99, r);  // set key
 
     size_t size_add = (size % r) == 0 ? 0 : r - (size % r);
-    printf("need add %d bytes\n", size_add);
+    printf("need add %d bytes\n", (int)size_add);
 
     /* Pad M to positive multiple of r bits */
 
@@ -122,13 +139,106 @@ void prost_encrypt(__u8 *data, size_t size
     }
 
     /* Compute tag */
+    print_v(V, r, 1, "before tag" );
 
     for (j = r - 1; j >= 0; --j) {
         T[j] = V[j] ^ 0x99;
     }
+    print_v(T, r, 1, "tag" );
 
     *ct = C;
     *tag = T;
     *size_ct = size + size_add;
     *size_tag = r;
+}
+
+int prost_decrypt(__u8 *ct, size_t ct_size
+                  , __u8 *tag, size_t tag_size
+                  , __u8 **output, size_t *size_output)
+{
+    int i, j;
+
+    __u8 V_new[ r * 2];
+    memset(V_new, 0, r*2);
+
+    __u8 IV[ r * 2];
+    memset(IV + r, 0, r);
+    memset(IV, 0x99, r);  // set key
+
+    /* Prepend N to A and pad to positive multiple of r bits */
+
+    size_t x_size = 1;
+    __u8 *X = malloc(r);
+    memset(X, 0, r);
+    X[r - 1] = 0x80;
+
+    /* Process nonce and AD */
+
+    for(i = x_size - 1; i >= 0; --i) {
+        for (j = r - 1; j >= 0; --j) {
+            IV[r + j] ^= X[i*r + j];
+        }
+
+        prost_permutation(IV, 2 * r, V_new, 2 * r);
+        memcpy(IV, V_new, 2 * r);
+    }
+    IV[0] ^= 1;
+
+    /* Set dummy C[0] = IV r for a smoother loop */
+    assert(ct_size % r == 0);
+    size_t ct_blocks = ct_size / r;
+    __u8 *C = malloc((ct_blocks + 1) * r);
+    memcpy(C, ct, ct_size  + r);
+
+    for (j = r - 1; j >= 0; --j) {
+        C[ct_blocks * r + j] = IV[r + j];
+    }
+
+    __u8 V[ r * 2];
+    memset(V, 0, r*2);
+
+    assert(tag_size == r);
+
+    for (j = r - 1; j >= 0; --j) {
+        V[j] = tag[j] ^ 0x99;
+    }
+    print_v(tag, r, 1, "dec tag" );
+    print_v(V, r, 1, "dec V" );
+
+    /* Process ciphertext */
+    __u8 TMP[ r *2];
+    memset(TMP, 0, r*2);
+
+    __u8 *M = malloc(ct_blocks * r);
+    memset(M, 0, ct_blocks * r);
+
+    for(i = 0; i < (int)ct_blocks; ++i) {
+        for (j = r - 1; j >= 0; --j) {
+            TMP[r + j] = C[i*r + j];
+            TMP[j] = V[j];
+        }
+        prost_permutation_inverse(TMP, 2 * r, V, 2 * r);
+        for (j = r - 1; j >= 0; --j) {
+            M[i*r + j] = V[r + j] ^ C[(i+1)*r + j];
+        }
+    }
+
+    print_v(M, ct_blocks*r, 1, "decr M");
+
+    int is_correct = 1;
+    for (i = r - 1; i >= 0; --i) {
+        if (IV[i] != V[i]) {
+            is_correct = 0;
+            break;
+        }
+    }
+
+    print_v(IV, r, 1, "decr IV fin");
+    print_v(V, r, 1, "decr V fin");
+
+    printf("CORRECT IS  %d\n", is_correct);
+
+    *output = M;
+    *size_output = ct_blocks * r;
+    return is_correct;
 }

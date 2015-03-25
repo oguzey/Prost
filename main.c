@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <linux/types.h>
 #include <assert.h>
+#include <stdlib.h>
 
 #include "Prost_Permutation.h"
 #include "Prost_APE.h"
@@ -58,6 +59,19 @@ int main(void)
     }
     printf("\n");
 
+    __u8 *M = NULL;
+    size_t size_M = 0;
+    int res = prost_decrypt(ct, size_ct, tag, size_tag, &M, &size_M);
+
+    printf("\nres dec is %d\n", res);
+    printf("Open text \n");
+    for(i = 0; i < (int)size_M; ++i) {
+        printf("%02x ", M[i]);
+    }
+    printf("\n");
+    free(M);
+    free(ct);
+    free(tag);
     return 0;
 }
 
