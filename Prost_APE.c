@@ -9,52 +9,6 @@
 #define r (256 / 8)
 #define c r
 
-//typedef struct {
-//    __u8 data[r];
-//} block;
-
-//static block** concatenation_data_to_block(__u8 *one_data, size_t one_size,
-//                            __u8 *two_data, size_t two_size)
-//{
-//    size_t all_size = one_size + two_size;
-
-//    assert(all_size % r == 0);
-//    assert(sizeof(block) - r == 0);
-
-//    size_t count_blocks = all_size / r;
-
-//    printf("all size %u , count blocks %u\n", all_size, count_blocks);
-
-//    int i;
-//    block **blocks = malloc(sizeof(block*) * count_blocks);
-//    for (i = 0; i < count_blocks; ++i) {
-//        blocks[i] = malloc(sizeof(block));
-//    }
-//    __u8 *all = malloc(all_size);
-//    memcpy(all, one_data, one_size);
-//    if (two_size) {
-//        memcpy(all + one_data, two_data, two_size);
-//    }
-//    for (i = 0; i < all_size; ++i) {
-//        blocks[i/r]->data[i%r] = all[i];
-//        printf("block %d, cell data %d, all %d\n", i/r, i%r, all[i]);
-//    }
-//    return blocks;
-//}
-
-//static block** normalize_data(__u8 *data, size_t size)
-//{
-//    __u8 *add = NULL;
-//    size_t size_add = r - (size % r);
-//    printf("normalize_data| need add %d bytes\n", size_add);
-//    if (size_add) {
-//        add = malloc(sizeof(__u8) * size_add);
-//        memset(add, 0, size_add);
-//        add[0] = 0x80;
-//    }
-//    return concatenation_data_to_block(data, size, add, size_add);
-//}
-
 #define print_v(vector, size, reverse, msg) \
 do {                        \
     int i;      \
@@ -73,8 +27,33 @@ printf("\n");   \
 } while(0)
 
 
+static size_t create_X(__u8 *nonce, size_t nonce_size
+                     , __u8 *a_data, size_t a_data_size, __u8 **X)
+{
+    size_t N_A_size = nonce_size + a_data_size;
+    size_t x_size = N_A_size / r;
+    if (N_A_size % r != 0) {
+        x_size = (N_A_size + r - (N_A_size % r)) / r;
+    }
+    printf("x_size = %d   N_A_size= %d\n", x_size, N_A_size);
+
+    __u8 *ret = malloc(x_size * r);
+    memset(ret, 0, x_size * r);
+    if (nonce)
+        memcpy(ret + x_size * r - nonce_size, nonce, nonce_size);
+
+    if (a_data)
+        memcpy(ret + x_size * r - N_A_size, a_data, a_data_size);
+    ret[x_size * r - N_A_size - 1] = 0x80;
+    *X = ret;
+    return x_size;
+}
+
 void prost_encrypt(__u8 *data, size_t size
-                   , __u8 **ct, size_t *size_ct, __u8 **tag, size_t *size_tag)
+                   , __u8 **ct, size_t *size_ct
+                   , __u8 **tag, size_t *size_tag
+                   ,__u8 *nonce, size_t nonce_size
+                   , __u8 *a_data, size_t a_data_size)
 {
     int i = 0, j = 0;
 
@@ -104,12 +83,8 @@ void prost_encrypt(__u8 *data, size_t size
     __u8 *T = malloc(r);
 
     /* Prepend N to A and pad to positive multiple of r bits */
-
-    size_t x_size = 1;
-    __u8 *X = malloc(r);
-    memset(X, 0, r);
-    X[r - 1] = 0x80;
-
+    __u8 *X = NULL;
+    size_t x_size = create_X(nonce, nonce_size, a_data, a_data_size, &X);
     /* Process nonce and AD */
 
     for(i = x_size - 1; i >= 0; --i) {
@@ -154,7 +129,9 @@ void prost_encrypt(__u8 *data, size_t size
 
 int prost_decrypt(__u8 *ct, size_t ct_size
                   , __u8 *tag, size_t tag_size
-                  , __u8 **output, size_t *size_output)
+                  , __u8 **output, size_t *size_output
+                  ,__u8 *nonce, size_t nonce_size
+                  , __u8 *a_data, size_t a_data_size)
 {
     int i, j;
 
@@ -167,10 +144,8 @@ int prost_decrypt(__u8 *ct, size_t ct_size
 
     /* Prepend N to A and pad to positive multiple of r bits */
 
-    size_t x_size = 1;
-    __u8 *X = malloc(r);
-    memset(X, 0, r);
-    X[r - 1] = 0x80;
+    __u8 *X = NULL;
+    size_t x_size = create_X(nonce, nonce_size, a_data, a_data_size, &X);
 
     /* Process nonce and AD */
 

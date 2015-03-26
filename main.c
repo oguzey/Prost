@@ -39,16 +39,18 @@ int main(void)
     assert(test_prost_permutation() == 0);
 
     __u8 input[64];
+    __u8 nonce[65];
     int i = 0;
 
     for(i = 0; i < 64; ++i) {
         input[i] = i;
+        nonce[i] = 88 + i;
     }
 
     __u8 *ct = NULL;
     __u8 *tag = NULL;
     size_t size_ct = 0, size_tag = 0;
-    prost_encrypt(input, 64, &ct, &size_ct, &tag, &size_tag);
+    prost_encrypt(input, 64, &ct, &size_ct, &tag, &size_tag, nonce, 65, nonce, 13);
     printf("Cypher text \n");
     for(i = size_ct - 1; i >= 0; --i) {
         printf("%02x ", ct[i]);
@@ -61,7 +63,8 @@ int main(void)
 
     __u8 *M = NULL;
     size_t size_M = 0;
-    int res = prost_decrypt(ct, size_ct, tag, size_tag, &M, &size_M);
+    int res = prost_decrypt(ct, size_ct, tag, size_tag, &M, &size_M
+                            , nonce, 65, nonce, 13);
 
     printf("\nres dec is %d\n", res);
     printf("Open text \n");
@@ -71,7 +74,7 @@ int main(void)
     printf("\n");
     free(M);
     free(ct);
-    free(tag);
+    //free(tag);
     return 0;
 }
 
