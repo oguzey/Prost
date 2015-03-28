@@ -5,6 +5,7 @@
 #include <stdlib.h>
 
 #include "Prost_Permutation.h"
+#include "Prost_APE.h"
 
 #define r (256 / 8)
 #define c r
@@ -26,11 +27,53 @@ if (reverse) {      \
 printf("\n");   \
 } while(0)
 
+static Data* prost_strip_padding(__u8 *msg, size_t size);
 
-static size_t create_X(__u8 *nonce, size_t nonce_size
-                     , __u8 *a_data, size_t a_data_size, __u8 **X)
+/**********************************************************/
+/*
+ * Helpful functions
+ */
+Data *data_create(__u8 *a_data, size_t a_size)
 {
-    size_t N_A_size = nonce_size + a_data_size;
+    Data *data = malloc(sizeof(Data));
+    data->data = a_data;
+    data->size = a_size;
+    return data;
+}
+
+void data_destroy(Data *data)
+{
+    if (data) {
+        free(data->data);
+        free(data);
+    }
+}
+
+void data_print(Data *data, char *msg)
+{
+    printf("%s\n", msg);
+    if (data) {
+        int i = 0;
+        for (; i < (int)data->size; ++i) {
+            printf("%02x ", data->data[i]);
+        }
+        printf("\n");
+    } else {
+        printf("(null)\n");
+    }
+}
+
+/**********************************************************/
+
+static Data* create_X(Data *nonce, Data *associated_data)
+{
+    size_t N_A_size = 0;
+    if (nonce) {
+        N_A_size += nonce->size;
+    }
+    if (associated_data) {
+        N_A_size += associated_data->size;
+    }
     size_t x_size = N_A_size / r;
     if (N_A_size % r != 0) {
         x_size = (N_A_size + r - (N_A_size % r)) / r;
@@ -40,20 +83,17 @@ static size_t create_X(__u8 *nonce, size_t nonce_size
     __u8 *ret = malloc(x_size * r);
     memset(ret, 0, x_size * r);
     if (nonce)
-        memcpy(ret + x_size * r - nonce_size, nonce, nonce_size);
+        memcpy(ret + x_size * r - nonce->size, nonce->data, nonce->size);
 
-    if (a_data)
-        memcpy(ret + x_size * r - N_A_size, a_data, a_data_size);
+    if (associated_data)
+        memcpy(ret + x_size * r - N_A_size, associated_data->data
+                                            , associated_data->size);
     ret[x_size * r - N_A_size - 1] = 0x80;
-    *X = ret;
-    return x_size;
+    return data_create(ret, x_size * r);
 }
 
-void prost_encrypt(__u8 *data, size_t size
-                   , __u8 **ct, size_t *size_ct
-                   , __u8 **tag, size_t *size_tag
-                   ,__u8 *nonce, size_t nonce_size
-                   , __u8 *a_data, size_t a_data_size)
+void prost_encrypt(Data *data, Data *nonce, Data *assoc_data,
+                   Data **CT, Data ** tag)
 {
     int i = 0, j = 0;
 
@@ -63,33 +103,34 @@ void prost_encrypt(__u8 *data, size_t size
     __u8 V[ r * 2];
     memset(V + r, 0, r);
     memset(V, 0x99, r);  // set key
+    size_t pad_size = (data->size % r) == 0 ? 0 : r - (data->size % r);
 
-    size_t size_add = (size % r) == 0 ? 0 : r - (size % r);
-    printf("need add %d bytes\n", (int)size_add);
+    size_t all_size = data->size + pad_size;
+    printf("Need to add %d bytes as pad\n", (int)pad_size);
 
     /* Pad M to positive multiple of r bits */
 
-    size_t m_size = (size + size_add) / r;
+    size_t m_blocks = all_size / r;
 
-    __u8 *M = malloc(size + size_add);
-    memset(M, 0, size + size_add);
-    for (i = 0; i < (int)size; ++i) {
-        M[size + size_add - 1 - i] = data[i];
+    __u8 *M = malloc(all_size);
+    memset(M, 0, all_size);
+    for (i = 0; i < (int)data->size; ++i) {
+        M[all_size - 1 - i] = data->data[data->size - i - 1];
     }
-    M[size + size_add - 1 - i] = 0x80;
+    M[all_size - 1 - i] = 0x80;
 
 
-    __u8 *C = malloc(size + size_add);
+    __u8 *C = malloc(all_size);
     __u8 *T = malloc(r);
 
     /* Prepend N to A and pad to positive multiple of r bits */
-    __u8 *X = NULL;
-    size_t x_size = create_X(nonce, nonce_size, a_data, a_data_size, &X);
+    Data *X = create_X(nonce, assoc_data);
+    size_t x_blocks = X->size / r;
     /* Process nonce and AD */
 
-    for(i = x_size - 1; i >= 0; --i) {
+    for(i = x_blocks - 1; i >= 0; --i) {
         for (j = r - 1; j >= 0; --j) {
-            V[r + j] ^= X[i*r + j];
+            V[r + j] ^= X->data[i*r + j];
         }
 
         prost_permutation(V, 2 * r, V_new, 2 * r);
@@ -100,7 +141,7 @@ void prost_encrypt(__u8 *data, size_t size
 
     /* Process message */
 
-    for(i = m_size - 1; i >= 0; --i) {
+    for(i = m_blocks - 1; i >= 0; --i) {
         for (j = r - 1; j >= 0; --j) {
             V[r + j] ^= M[i*r + j];
         }
@@ -112,7 +153,7 @@ void prost_encrypt(__u8 *data, size_t size
             C[i*r + j] = V[r + j];
         }
     }
-
+    free(M);
     /* Compute tag */
     print_v(V, r, 1, "before tag" );
 
@@ -121,17 +162,12 @@ void prost_encrypt(__u8 *data, size_t size
     }
     print_v(T, r, 1, "tag" );
 
-    *ct = C;
-    *tag = T;
-    *size_ct = size + size_add;
-    *size_tag = r;
+    *CT = data_create(C, all_size);
+    *tag = data_create(T, r);
 }
 
-int prost_decrypt(__u8 *ct, size_t ct_size
-                  , __u8 *tag, size_t tag_size
-                  , __u8 **output, size_t *size_output
-                  ,__u8 *nonce, size_t nonce_size
-                  , __u8 *a_data, size_t a_data_size)
+int prost_decrypt(Data *CT, Data *tag, Data *nonce, Data *assoc_data,
+                       Data **OT)
 {
     int i, j;
 
@@ -144,26 +180,27 @@ int prost_decrypt(__u8 *ct, size_t ct_size
 
     /* Prepend N to A and pad to positive multiple of r bits */
 
-    __u8 *X = NULL;
-    size_t x_size = create_X(nonce, nonce_size, a_data, a_data_size, &X);
+    Data *X = create_X(nonce, assoc_data);
+    size_t x_blocks = X->size / r;
 
     /* Process nonce and AD */
 
-    for(i = x_size - 1; i >= 0; --i) {
+    for(i = x_blocks - 1; i >= 0; --i) {
         for (j = r - 1; j >= 0; --j) {
-            IV[r + j] ^= X[i*r + j];
+            IV[r + j] ^= X->data[i*r + j];
         }
 
         prost_permutation(IV, 2 * r, V_new, 2 * r);
         memcpy(IV, V_new, 2 * r);
     }
     IV[0] ^= 1;
+    data_destroy(X);
 
     /* Set dummy C[0] = IV r for a smoother loop */
-    assert(ct_size % r == 0);
-    size_t ct_blocks = ct_size / r;
+    assert(CT->size % r == 0);
+    size_t ct_blocks = CT->size / r;
     __u8 *C = malloc((ct_blocks + 1) * r);
-    memcpy(C, ct, ct_size  + r);
+    memcpy(C, CT->data, CT->size  + r);
 
     for (j = r - 1; j >= 0; --j) {
         C[ct_blocks * r + j] = IV[r + j];
@@ -172,12 +209,12 @@ int prost_decrypt(__u8 *ct, size_t ct_size
     __u8 V[ r * 2];
     memset(V, 0, r*2);
 
-    assert(tag_size == r);
+    assert(tag->size == r);
 
     for (j = r - 1; j >= 0; --j) {
-        V[j] = tag[j] ^ 0x99;
+        V[j] = tag->data[j] ^ 0x99;
     }
-    print_v(tag, r, 1, "dec tag" );
+    print_v(tag->data, r, 1, "dec tag" );
     print_v(V, r, 1, "dec V" );
 
     /* Process ciphertext */
@@ -197,13 +234,13 @@ int prost_decrypt(__u8 *ct, size_t ct_size
             M[i*r + j] = V[r + j] ^ C[(i+1)*r + j];
         }
     }
-
+    free(C);
     print_v(M, ct_blocks*r, 1, "decr M");
 
-    int is_correct = 1;
+    int is_fail = 0;
     for (i = r - 1; i >= 0; --i) {
         if (IV[i] != V[i]) {
-            is_correct = 0;
+            is_fail = 1;
             break;
         }
     }
@@ -211,9 +248,30 @@ int prost_decrypt(__u8 *ct, size_t ct_size
     print_v(IV, r, 1, "decr IV fin");
     print_v(V, r, 1, "decr V fin");
 
-    printf("CORRECT IS  %d\n", is_correct);
+    printf("CORRECT IS  %d\n", !is_fail);
 
-    *output = M;
-    *size_output = ct_blocks * r;
-    return is_correct;
+    *OT = prost_strip_padding(M, CT->size);
+    return is_fail;
+}
+
+static Data* prost_strip_padding(__u8 *msg, size_t size)
+{
+    size_t pad_size = 0;
+    size_t i;
+    for(i = 0; i < size-1; ++i) {
+        if (msg[i] == 0) {
+            pad_size++;
+            if (msg[i+1] == 0x80) {
+                pad_size++;
+                break;
+            }
+        }
+    }
+    printf("Size pad is %d. Cut it!\n", pad_size);
+    size_t new_size = size - pad_size;
+    __u8 *new_data = malloc(new_size);
+    for (i = 0; i < new_size; ++i) {
+        new_data[i] = msg[pad_size +i];
+    }
+    return data_create(new_data, new_size);
 }
