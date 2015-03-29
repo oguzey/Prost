@@ -193,7 +193,7 @@ int main(int argc, char **argv)
     case Encrypt:
         OT = read_data(_s_data_file);
         data_print(OT, "OT: ");
-        prost_encrypt(OT, nonce, assoc_data, &CT, &mac);
+        prost_encrypt(OT, nonce, assoc_data, _s_password, &CT, &mac);
         write_data(CT, _s_enc_file);
         write_data(mac, _s_mac_file);
     break;
@@ -202,7 +202,7 @@ int main(int argc, char **argv)
         mac = read_data(_s_mac_file);
         data_print(CT, "CT: ");
         data_print(mac, "mac: ");
-        if (prost_decrypt(CT, mac, nonce, assoc_data, &OT)) {
+        if (prost_decrypt(CT, mac, nonce, assoc_data, _s_password, &OT)) {
             printf("Error was occured in decryption.\n");
         }
         data_print(OT, "Got OT:");

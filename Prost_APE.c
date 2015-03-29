@@ -65,6 +65,58 @@ void data_print(Data *data, char *msg)
 
 /**********************************************************/
 
+#define print_bit_uint(bit, value) do {                  \
+    printf("%s = ", #value);                        \
+    long int tmp = 0;                               \
+    int i = 0;                                      \
+    int size = bit;                \
+    for (i = size - 1;i >= 0; --i) {                          \
+        tmp = 1;                                   \
+        tmp <<= i;                                 \
+        printf("%s", (tmp & value) ? "1" : "0");   \
+    }                                               \
+    printf("\n");                                   \
+    } while(0)
+
+
+static void generate_key_from_password(const char *pass, __u8 *key)
+{
+    memset(key, 0, r);
+
+    /* x[t] = x[t - 3] ^ x[t - 5] ^ x[t - 9] ^ x[t - 20]*/
+
+    __u32 LFSR = 0;
+    __u8 bit_res = 0;
+    __u32 cell_0, cell_11, cell_15, cell_17;
+    size_t len = strlen(pass);
+    int i, j;
+    for (i = 0; i < (int)len; ++i) {
+        j = i % 4;
+        LFSR ^= pass[i] << j * 8;
+    }
+    /* set init value */
+    LFSR = LFSR % 0x0fffff;
+    cell_0 = 1 << 0;
+    cell_11 = 1 << 11;
+    cell_15 = 1 << 15;
+    cell_17 = 1 << 17;
+    for (i = 0; i < r * 8; ++i) {
+
+        bit_res = LFSR & 1;
+        key[i/8] ^= (bit_res << (i % 8));
+
+        bit_res = 0;
+        if (LFSR & cell_0) bit_res ^= 1;
+        if (LFSR & cell_11) bit_res ^= 1;
+        if (LFSR & cell_15) bit_res ^= 1;
+        if (LFSR & cell_17) bit_res ^= 1;
+
+        LFSR >>= 1;
+        LFSR ^= bit_res << 19;
+    }
+}
+
+
 static Data* create_X(Data *nonce, Data *associated_data)
 {
     size_t N_A_size = 0;
@@ -92,7 +144,7 @@ static Data* create_X(Data *nonce, Data *associated_data)
     return data_create(ret, x_size * r);
 }
 
-void prost_encrypt(Data *data, Data *nonce, Data *assoc_data,
+void prost_encrypt(Data *data, Data *nonce, Data *assoc_data, const char *pass,
                    Data **CT, Data ** tag)
 {
     int i = 0, j = 0;
@@ -101,8 +153,9 @@ void prost_encrypt(Data *data, Data *nonce, Data *assoc_data,
     memset(V_new, 0, r*2);
 
     __u8 V[ r * 2];
+    generate_key_from_password(pass, V);
     memset(V + r, 0, r);
-    memset(V, 0x99, r);  // set key
+    //memset(V, 0x99, r);  // set key
     size_t pad_size = (data->size % r) == 0 ? 0 : r - (data->size % r);
 
     size_t all_size = data->size + pad_size;
@@ -167,7 +220,7 @@ void prost_encrypt(Data *data, Data *nonce, Data *assoc_data,
 }
 
 int prost_decrypt(Data *CT, Data *tag, Data *nonce, Data *assoc_data,
-                       Data **OT)
+                  const char *pass, Data **OT)
 {
     int i, j;
 
@@ -175,8 +228,9 @@ int prost_decrypt(Data *CT, Data *tag, Data *nonce, Data *assoc_data,
     memset(V_new, 0, r*2);
 
     __u8 IV[ r * 2];
+    generate_key_from_password(pass, IV);
     memset(IV + r, 0, r);
-    memset(IV, 0x99, r);  // set key
+    //memset(IV, 0x99, r);  // set key
 
     /* Prepend N to A and pad to positive multiple of r bits */
 
