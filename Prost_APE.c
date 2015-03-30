@@ -130,7 +130,7 @@ static Data* create_X(Data *nonce, Data *associated_data)
     if (N_A_size % r != 0) {
         x_size = (N_A_size + r - (N_A_size % r)) / r;
     }
-    printf("x_size = %d   N_A_size= %d\n", x_size, N_A_size);
+    printf("x_size = %d   N_A_size= %d\n", (int)x_size, (int)N_A_size);
 
     __u8 *ret = malloc(x_size * r);
     memset(ret, 0, x_size * r);
@@ -321,7 +321,7 @@ static Data* prost_strip_padding(__u8 *msg, size_t size)
             }
         }
     }
-    printf("Size pad is %d. Cut it!\n", pad_size);
+    printf("Size pad is %d. Cut it!\n", (int)pad_size);
     size_t new_size = size - pad_size;
     __u8 *new_data = malloc(new_size);
     for (i = 0; i < new_size; ++i) {

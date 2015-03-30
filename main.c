@@ -52,6 +52,7 @@ static char *_s_enc_file = NULL;
 static char *_s_mac_file = NULL;
 static char *_s_password = NULL;
 static char *_s_nonce_file = NULL;
+static char *_s_assoc_data_file = NULL;
 static Action _s_action = -1;
 
 
@@ -98,6 +99,13 @@ static void get_args(int argc, char **argv)
             } else {
                 panic("Missing argument for option %s\n", argv[i]);
             }
+        }  else if (strcmp(argv[i],"--assoc-data")==0 ) {
+            if (argc > i + 1) {
+                _s_assoc_data_file = argv[i + 1];
+                i++;
+            } else {
+                panic("Missing argument for option %s\n", argv[i]);
+            }
         } else if (strcmp(argv[i],"-a")==0 || strcmp(argv[i],"--action")==0) {
             if (argc > i + 1) {
                 if (strcmp(argv[i + 1],"encrypt") == 0) {
@@ -130,6 +138,11 @@ static Data* read_data(const char *filename)
     int c;
     int i;
     size_t size = 0;
+
+    if (filemane == NULL) {
+        printf("File not provided\n");
+        return NULL;
+    }
 
     if (stat(filename, &sb) == -1) {
         printf("Could not process file '%s'\n", filename);
@@ -176,17 +189,18 @@ void write_data(Data *data, const char *filename)
 
 int main(int argc, char **argv)
 {
-    printf("Hello World!\n");
-    assert(test_prost_permutation() == 0);
-
     get_args(argc, argv);
 
+    assert(test_prost_permutation() == 0);
+
     Data *nonce = read_data(_s_nonce_file);
-    data_print(nonce, "Nonce: ");
-    Data *assoc_data = NULL;
+    Data *assoc_data = read_data(_s_assoc_data_file);;
     Data *OT = NULL;
     Data *CT = NULL;
     Data *mac = NULL;
+
+    data_print(nonce, "Nonce: ");
+    data_print(assoc_data, "Assoc data: ");
 
 
     switch (_s_action) {
