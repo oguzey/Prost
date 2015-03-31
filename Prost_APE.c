@@ -88,12 +88,14 @@ static void generate_key_from_password(const char *pass, __u8 *key)
     __u32 LFSR = 0;
     __u8 bit_res = 0;
     __u32 cell_0, cell_11, cell_15, cell_17;
-    size_t len = strlen(pass);
-    int i, j;
-    for (i = 0; i < (int)len; ++i) {
-        j = i % 4;
+	int len = strlen(pass);
+    int i;
+    //TODO: need to use cryptographic hash function
+    for (i = 0; i < len; ++i) {
+        int j = i % 4;
         LFSR ^= pass[i] << j * 8;
     }
+
     /* set init value */
     LFSR = LFSR % 0x0fffff;
     cell_0 = 1 << 0;

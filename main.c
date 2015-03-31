@@ -139,7 +139,7 @@ static Data* read_data(const char *filename)
     int i;
     size_t size = 0;
 
-    if (filemane == NULL) {
+    if (filename == NULL) {
         printf("File not provided\n");
         return NULL;
     }
